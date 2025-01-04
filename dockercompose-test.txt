@@ -1,0 +1,127 @@
+version: "3"
+
+networks:
+  web:
+    external: true
+  internal:
+    external: false
+
+services:
+  traefik:
+    image: traefik:1.7.6-alpine
+    command: --docker
+    container_name: traefik
+    hostname: traefik
+    labels:
+      - traefik.frontend.rule=Host:monitor.woude.net
+      - traefik.port=8080
+    restart: always
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /data/traefik/traefik.toml:/traefik.toml
+      - /data/traefik/acme.json:/acme.json
+
+    networks:
+      - web
+    ports:
+      - 80:80
+      - 443:443
+
+
+
+  nextcloud:
+    image: nextcloud
+    environment:
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=root
+    links:
+      - mysql
+    restart: always
+    volumes:
+      - /data/nextcloud/nextcloud:/var/www/html
+      - /data/nextcloud/apps:/var/www/html/custom_apps
+      - /data/nextcloud/data:/var/www/html/data
+      - /data/nextcloud/config:/var/www/html/config
+    labels:
+      - traefik.backend=nextcloud
+      - traefik.frontend.rule=Host:cloud.woude.net
+      - traefik.docker.network=web
+      - traefik.port=80
+    networks:
+      - internal
+      - web
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mariadb:10.2
+    environment:
+      MYSQL_ROOT_PASSWORD: Ditiseenveiligwachtwoord!
+    restart: always
+    networks:
+      - internal
+    labels:
+      - traefik.enable=false
+
+
+
+  adminer:
+    image: adminer:4.6.3-standalone
+    labels:
+      - traefik.backend=adminer
+      - traefik.frontend.rule=Host:db-admin.woude.net
+      - traefik.docker.network=web
+      - traefik.port=8080
+    networks:
+      - internal
+      - web
+    depends_on:
+      - mysql
+
+  wordpress:
+      image: wordpress:latest # https://hub.docker.com/_/wordpress/
+    volumes:
+      - /data/wordpress/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini
+      - /data/wordpress:/var/www/html # Full wordpress project
+      #- ./plugin-name/trunk/:/var/www/html/wp-content/plugins/plugin-name # Plugin development
+      #- ./theme-name/trunk/:/var/www/html/wp-content/themes/theme-name # Theme development
+
+    labels:
+      - traefik.backend=wordpress
+      - traefik.frontend.rule=Host:woude.net,www.woude.net
+      - traefik.docker.network=web
+      - traefik.port=80
+
+    networks:
+      - internal
+      - web
+    restart: always
+    
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: Ditiseenveiligwachtwoord!
+    depends_on:
+      - mysql
+      
+      
+      
+      
+      ====================
+      Opvolger van Adminer
+      ====================
+      
+services:
+  adminer:
+    image: ghcr.io/shyim/adminerevo:latest
+    restart: always
+    ports:
+      - 8080:8080
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+
